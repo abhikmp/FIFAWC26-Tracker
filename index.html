@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIFA WC26 Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #222535;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0; --text2: #9098b0; --text3: #5a6280;
+    --accent: #4f8ef7; --green: #22c55e; --red: #ef4444; --yellow: #f59e0b;
+    --qualify-line: rgba(34,197,94,0.25); --radius: 10px; --radius-sm: 6px;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; min-height: 100vh; }
+
+  /* HEADER */
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 52px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .logo-icon { width: 28px; height: 28px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+
+  /* REFRESH CONTROLS */
+  .refresh-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 6px;
+    border: 1px solid var(--border2); background: transparent;
+    color: var(--text2); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .refresh-btn:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+  .refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .quota-pill {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 8px; border-radius: 20px;
+    background: rgba(79,142,247,0.1);
+    border: 1px solid rgba(79,142,247,0.25);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .quota-pill.low { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.25); color: var(--yellow); }
+  .quota-pill.critical { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: var(--red); }
+
+  .last-updated { font-size: 11px; color: var(--text3); }
+
+  /* BANNER */
+  .banner { height: 5px; background: linear-gradient(90deg, #e8112d 16.66%, #fcd116 16.66% 33.33%, #009b48 33.33% 50%, #0057a8 50% 66.66%, #ee3124 66.66% 83.33%, #000080 83.33%); }
+
+  /* LAYOUT */
+  .main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+  .two-col { display: grid; grid-template-columns: 1fr 360px; gap: 16px; align-items: start; }
+  .left-col { display: flex; flex-direction: column; gap: 16px; }
+
+  /* STATE OVERLAYS */
+  .card-state { padding: 32px 16px; text-align: center; color: var(--text3); font-size: 13px; }
+  .card-state .state-title { font-size: 14px; color: var(--text2); font-weight: 500; margin-bottom: 6px; }
+  .skeleton { background: var(--surface2); border-radius: 4px; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+  .skel-row { height: 38px; margin: 1px 0; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* GROUP PILLS */
+  .group-nav { padding: 10px 16px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .group-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+  .pill { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border2); background: transparent; color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .pill:hover { background: var(--surface2); color: var(--text); }
+  .pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .nav-arrows { display: flex; gap: 6px; margin-left: auto; }
+  .arrow-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; font-size: 16px; }
+  .arrow-btn:hover { background: var(--surface2); color: var(--text); }
+
+  /* STANDINGS TABLE */
+  .group-label { padding: 10px 16px 6px; font-size: 16px; font-weight: 700; color: var(--text); }
+  .standings-table { width: 100%; border-collapse: collapse; }
+  .standings-table thead th { padding: 6px 8px; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; text-align: center; }
+  .standings-table thead th:nth-child(2) { text-align: left; padding-left: 12px; }
+  .standings-table tbody tr { border-top: 1px solid var(--border); transition: background 0.1s; }
+  .standings-table tbody tr:hover { background: var(--surface2); }
+  .standings-table td { padding: 9px 8px; text-align: center; font-size: 13px; }
+  .standings-table td:nth-child(2) { text-align: left; padding-left: 12px; }
+  .standings-table td.pts { font-weight: 700; }
+  .standings-table td.rank { color: var(--text3); font-size: 12px; font-weight: 600; }
+  .team-cell { display: flex; align-items: center; gap: 8px; }
+  .team-logo { width: 20px; height: 20px; object-fit: contain; }
+  .team-name { font-weight: 500; color: var(--text); }
+  .qualify-row td { border-top: 2px solid var(--qualify-line) !important; }
+  .form-dot { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; align-items: center; justify-content: center; margin-right: 2px; }
+  .form-w { background: rgba(34,197,94,0.2); color: var(--green); }
+  .form-d { background: rgba(90,98,128,0.3); color: var(--text3); }
+  .form-l { background: rgba(239,68,68,0.2); color: var(--red); }
+  .form-e { background: rgba(90,98,128,0.1); }
+
+  /* AWARDS */
+  .toggle-bar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .toggle-pill { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .toggle-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .award-row { display: flex; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border); gap: 12px; }
+  .award-row:first-child { border-top: none; }
+  .award-rank { width: 24px; font-size: 12px; font-weight: 700; color: var(--text3); text-align: center; flex-shrink: 0; }
+  .award-rank.gold { color: #f59e0b; } .award-rank.silver { color: #94a3b8; } .award-rank.bronze { color: #cd7c4e; }
+  .award-info { flex: 1; }
+  .award-name { font-weight: 600; font-size: 13px; color: var(--text); }
+  .award-meta { font-size: 12px; color: var(--text3); }
+  .award-stat { font-size: 20px; font-weight: 700; color: var(--accent); }
+
+  /* 3RD PLACE */
+  .third-table { width: 100%; border-collapse: collapse; }
+  .third-table thead th { padding: 6px 8px; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; text-align: center; }
+  .third-table thead th:nth-child(2) { text-align: left; padding-left: 12px; }
+  .third-table tbody tr { border-top: 1px solid var(--border); }
+  .third-table td { padding: 8px 8px; text-align: center; font-size: 12px; }
+  .third-table td:nth-child(2) { text-align: left; padding-left: 12px; }
+  .third-table td.pts { font-weight: 700; }
+  .top8-row td:first-child { border-left: 3px solid var(--green); }
+  .cutoff-row td { border-top: 2px solid var(--qualify-line) !important; }
+
+  /* BRACKET */
+  .bracket-section { margin-top: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .bracket-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .projected-badge { font-size: 11px; background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); border-radius: 20px; padding: 2px 10px; font-weight: 600; }
+  .bracket-scroll { overflow-x: auto; padding: 20px; }
+  .bracket-inner { display: flex; gap: 0; min-width: 1100px; }
+  .bracket-round { display: flex; flex-direction: column; min-width: 160px; }
+  .round-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; margin-bottom: 12px; padding: 0 8px; }
+  .round-matches { display: flex; flex-direction: column; flex: 1; justify-content: space-around; gap: 4px; }
+  .match-pair { position: relative; margin: 0 8px; }
+  .match-slot { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 6px; margin-bottom: 2px; min-height: 30px; white-space: nowrap; }
+  .match-slot.tbd { color: var(--text3); font-style: italic; }
+  .match-no { font-size: 10px; color: var(--text3); text-align: center; margin-bottom: 3px; font-weight: 600; }
+  .match-divider { height: 4px; }
+  .team-logo-sm { width: 16px; height: 16px; object-fit: contain; }
+
+  /* ERROR TOAST */
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid rgba(239,68,68,0.4); color: var(--red); border-radius: 8px; padding: 10px 16px; font-size: 13px; z-index: 999; animation: slideIn 0.2s ease; }
+  @keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">⚽</div>
+    FIFA WC26 Tracker
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="lastUpdated">—</span>
+    <span class="quota-pill" id="quotaPill">— / 100 calls</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
+      </svg>
+      Refresh
+    </button>
+  </div>
+</header>
+
+<div class="banner"></div>
+
+<main class="main">
+  <div class="two-col">
+    <div class="left-col">
+      <div class="card" id="groupCard">
+        <div class="card-header"><span class="card-title">Group standings</span></div>
+        <div class="group-nav">
+          <div class="group-pills" id="groupPills"></div>
+          <div class="nav-arrows">
+            <button class="arrow-btn" onclick="prevGroup()">&#8249;</button>
+            <button class="arrow-btn" onclick="nextGroup()">&#8250;</button>
+          </div>
+        </div>
+        <div id="groupContent"><div class="card-state"><div class="state-title">No data yet</div>Click refresh to load standings.</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Awards</span></div>
+        <div class="toggle-bar">
+          <button class="toggle-pill active" onclick="setAward('boot')">Golden boot</button>
+          <button class="toggle-pill" onclick="setAward('glove')">Golden glove</button>
+        </div>
+        <div id="awardContent"><div class="card-state">Click refresh to load.</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="overflow-y:auto; max-height:720px;">
+      <div class="card-header"><span class="card-title">3rd place ranking</span></div>
+      <table class="third-table">
+        <thead><tr><th>#</th><th>Team</th><th>MP</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead>
+        <tbody id="thirdBody"><tr><td colspan="8"><div class="card-state">Click refresh to load.</div></td></tr></tbody>
+      </table>
+      <div style="padding:10px 14px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:4px;vertical-align:middle;"></span>Top 8 advance to R32
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-section">
+    <div class="bracket-header">
+      <span class="card-title">Knockout bracket</span>
+      <span class="projected-badge">Projected — based on current standings</span>
+    </div>
+    <div class="bracket-scroll">
+      <div class="bracket-inner" id="bracketInner">
+        <div class="card-state" style="padding:40px;width:100%">Click refresh to load bracket.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let GROUPS = [];       // parsed from API
+let SCORERS = [];      // top scorers from API
+let FIXTURES = [];     // fixtures from API
+let currentGroup = 0;
+let currentAward = 'boot';
+
+// ─── QUOTA UI ────────────────────────────────────────────────────────────────
+function updateQuotaUI(remaining, lastUpdated) {
+  const pill = document.getElementById('quotaPill');
+  const used = 100 - (remaining ?? 100);
+  pill.textContent = `${remaining ?? '?'} calls left today`;
+  pill.className = 'quota-pill' + (remaining < 10 ? ' critical' : remaining < 25 ? ' low' : '');
+
+  if (lastUpdated) {
+    const d = new Date(lastUpdated);
+    document.getElementById('lastUpdated').textContent =
+      'Updated ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+}
+
+// ─── REFRESH ─────────────────────────────────────────────────────────────────
+async function doRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.classList.add('spinning');
+  btn.querySelector('span') && (btn.querySelector('span').textContent = 'Loading...');
+
+  try {
+    const res = await fetch('/api/refresh');
+    const json = await res.json();
+
+    if (!res.ok) {
+      showToast(json.error || 'Refresh failed');
+      updateQuotaUI(json.calls_remaining, null);
+      return;
+    }
+
+    ingestData(json);
+    updateQuotaUI(json.calls_remaining, json.fetched_at);
+  } catch (e) {
+    showToast('Network error — could not reach server.');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('spinning');
+  }
+}
+
+// ─── LOAD CACHE ON PAGE LOAD ─────────────────────────────────────────────────
+async function loadCache() {
+  try {
+    const res = await fetch('/api/cache');
+    const json = await res.json();
+    if (json.data !== null && json.standings) {
+      ingestData(json);
+    }
+    updateQuotaUI(json.calls_remaining, json.fetched_at);
+  } catch (e) { /* server not ready yet */ }
+}
+
+// ─── DATA INGESTION ───────────────────────────────────────────────────────────
+function ingestData(json) {
+  // Parse standings into our GROUPS array
+  if (json.standings && json.standings.length > 0) {
+    parseStandings(json.standings);
+  }
+  if (json.scorers) {
+    SCORERS = json.scorers;
+  }
+  if (json.fixtures) {
+    FIXTURES = json.fixtures;
+  }
+
+  renderGroup(currentGroup);
+  renderAwards(currentAward);
+  renderThird();
+  renderBracket();
+}
+
+function parseStandings(standingsResp) {
+  // API returns: response[0].league.standings = array of groups
+  // Each group is an array of team objects
+  GROUPS = [];
+
+  let leagueGroups = [];
+  if (standingsResp[0] && standingsResp[0].league && standingsResp[0].league.standings) {
+    leagueGroups = standingsResp[0].league.standings;
+  }
+
+  leagueGroups.forEach(group => {
+    if (!group || group.length === 0) return;
+    // Extract group letter from group name e.g. "Group A" → "A"
+    const groupName = group[0].group ? group[0].group.replace('Group ', '') : '?';
+
+    const teams = group.map(t => ({
+      name: t.team.name,
+      logo: t.team.logo,
+      mp: t.all.played,
+      w: t.all.win,
+      d: t.all.draw,
+      l: t.all.lose,
+      gf: t.all.goals.for,
+      ga: t.all.goals.against,
+      gd: t.goalsDiff,
+      pts: t.points,
+      form: (t.form || '').split('').slice(-5),
+    }));
+
+    GROUPS.push({ name: groupName, teams });
+  });
+
+  // Sort groups A–L
+  GROUPS.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Rebuild pills
+  const pillsEl = document.getElementById('groupPills');
+  pillsEl.innerHTML = GROUPS.map((g, i) =>
+    `<button class="pill ${i===currentGroup?'active':''}" onclick="setGroup(${i})">${g.name}</button>`
+  ).join('');
+}
+
+// ─── GROUP STANDINGS ─────────────────────────────────────────────────────────
+function formDot(r) {
+  if (!r) return '<span class="form-dot form-e"> </span>';
+  if (r==='W') return '<span class="form-dot form-w">W</span>';
+  if (r==='D') return '<span class="form-dot form-d">D</span>';
+  return '<span class="form-dot form-l">L</span>';
+}
+
+function renderGroup(idx) {
+  if (!GROUPS.length) return;
+  const g = GROUPS[idx];
+  if (!g) return;
+
+  let html = `<div class="group-label">Group ${g.name}</div>`;
+  html += `<table class="standings-table"><thead><tr>
+    <th>#</th><th>Team</th><th>MP</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>Form</th>
+  </tr></thead><tbody>`;
+
+  g.teams.forEach((t, i) => {
+    const cls = i === 2 ? 'qualify-row' : '';
+    const gdColor = t.gd > 0 ? 'var(--green)' : t.gd < 0 ? 'var(--red)' : 'var(--text2)';
+    const gdStr = t.gd > 0 ? '+' + t.gd : t.gd;
+    html += `<tr class="${cls}">
+      <td class="rank">${i+1}</td>
+      <td><div class="team-cell">
+        <img class="team-logo" src="${t.logo}" alt="" onerror="this.style.display='none'">
+        <span class="team-name">${t.name}</span>
+      </div></td>
+      <td>${t.mp}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td>
+      <td>${t.gf}</td><td>${t.ga}</td>
+      <td style="color:${gdColor}">${gdStr}</td>
+      <td class="pts">${t.pts}</td>
+      <td><div style="display:flex;gap:2px">${t.form.map(f=>formDot(f)).join('')}${Array(Math.max(0,5-t.form.length)).fill(formDot(null)).join('')}</div></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('groupContent').innerHTML = html;
+  document.querySelectorAll('.pill').forEach((p, i) => p.classList.toggle('active', i === idx));
+}
+
+function setGroup(idx) { currentGroup = idx; renderGroup(idx); }
+function nextGroup() { if(GROUPS.length) setGroup((currentGroup+1)%GROUPS.length); }
+function prevGroup() { if(GROUPS.length) setGroup((currentGroup+GROUPS.length-1)%GROUPS.length); }
+
+// Swipe
+let touchStartX = 0;
+document.getElementById('groupCard').addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.getElementById('groupCard').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 40) dx < 0 ? nextGroup() : prevGroup();
+});
+
+// ─── AWARDS ──────────────────────────────────────────────────────────────────
+function renderAwards(type) {
+  currentAward = type;
+  document.querySelectorAll('.toggle-pill').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase().includes(type === 'boot' ? 'boot' : 'glove'));
+  });
+
+  if (!SCORERS.length) {
+    document.getElementById('awardContent').innerHTML = '<div class="card-state">No data yet. Click refresh.</div>';
+    return;
+  }
+
+  // For golden boot: use top scorers from API
+  // For golden glove: filter goalkeepers with most clean sheets (from fixtures data if available)
+  // API top_scorers gives us goals; for glove we approximate from goalkeepers in scorer list
+  let html = '<div>';
+
+  if (type === 'boot') {
+    const top = SCORERS.slice(0, 8);
+    top.forEach((entry, i) => {
+      const p = entry.player;
+      const s = entry.statistics[0];
+      const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      html += `<div class="award-row">
+        <div class="award-rank ${rankClass}">${i+1}</div>
+        <img src="${p.photo}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
+        <div class="award-info">
+          <div class="award-name">${p.name}</div>
+          <div class="award-meta">${s.team.name}</div>
+        </div>
+        <div class="award-stat">${s.goals.total ?? 0}</div>
+      </div>`;
+    });
+  } else {
+    // Golden glove — filter scorers who are GKs, or show placeholder
+    const gks = SCORERS.filter(e => e.statistics[0].games.position === 'Goalkeeper').slice(0, 5);
+    if (gks.length === 0) {
+      html += '<div class="card-state"><div class="state-title">Golden glove</div>Goalkeeper stats available after more matches.</div>';
+    } else {
+      gks.forEach((entry, i) => {
+        const p = entry.player;
+        const s = entry.statistics[0];
+        const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+        html += `<div class="award-row">
+          <div class="award-rank ${rankClass}">${i+1}</div>
+          <img src="${p.photo}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
+          <div class="award-info">
+            <div class="award-name">${p.name}</div>
+            <div class="award-meta">${s.team.name}</div>
+          </div>
+          <div class="award-stat" style="font-size:14px">${s.goals.conceded ?? '—'} GA</div>
+        </div>`;
+      });
+    }
+  }
+
+  html += '</div>';
+  document.getElementById('awardContent').innerHTML = html;
+}
+
+function setAward(type) { renderAwards(type); }
+
+// ─── 3RD PLACE TABLE ─────────────────────────────────────────────────────────
+function renderThird() {
+  if (!GROUPS.length) return;
+
+  const thirds = GROUPS.map(g => ({ group: g.name, ...g.teams[2] }))
+    .filter(t => t.name);
+
+  thirds.sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd !== a.gd) return b.gd - a.gd;
+    return b.gf - a.gf;
+  });
+
+  let html = '';
+  thirds.forEach((t, i) => {
+    const top8 = i < 8;
+    const cutoff = i === 8;
+    const gdColor = t.gd > 0 ? 'var(--green)' : t.gd < 0 ? 'var(--red)' : 'var(--text2)';
+    html += `<tr class="${top8?'top8-row':''} ${cutoff?'cutoff-row':''}">
+      <td style="color:var(--text3);font-size:12px;font-weight:600">${i+1}</td>
+      <td><div class="team-cell">
+        <span style="font-size:10px;color:var(--text3);font-weight:700;min-width:18px">G${t.group}</span>
+        <img src="${t.logo}" alt="" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'">
+        <span style="font-weight:500;color:var(--text);font-size:12px">${t.name}</span>
+      </div></td>
+      <td>${t.mp}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td>
+      <td style="color:${gdColor}">${t.gd>0?'+'+t.gd:t.gd}</td>
+      <td class="pts" style="color:${top8?'var(--green)':'var(--text)'}">${t.pts}</td>
+    </tr>`;
+  });
+  document.getElementById('thirdBody').innerHTML = html;
+}
+
+// ─── BRACKET ─────────────────────────────────────────────────────────────────
+function getTeam(groupName, rank) {
+  const g = GROUPS.find(g => g.name === groupName);
+  if (!g) return null;
+  const sorted = [...g.teams].sort((a,b) => {
+    if (b.pts!==a.pts) return b.pts-a.pts;
+    if (b.gd!==a.gd) return b.gd-a.gd;
+    return b.gf-a.gf;
+  });
+  return sorted[rank] || null;
+}
+
+function getThirdQualifiers() {
+  return GROUPS
+    .map(g => ({ group: g.name, ...g.teams[2] }))
+    .filter(t => t.name)
+    .sort((a,b) => {
+      if (b.pts!==a.pts) return b.pts-a.pts;
+      if (b.gd!==a.gd) return b.gd-a.gd;
+      return b.gf-a.gf;
+    })
+    .slice(0, 8);
+}
+
+function getBestThirdFrom(letters) {
+  const q = getThirdQualifiers();
+  return q.find(t => letters.includes(t.group)) || null;
+}
+
+function teamSlot(groupName, rank) {
+  const t = getTeam(groupName, rank);
+  if (!t) return `<div class="match-slot tbd">${rank===0?'1':'2'}${groupName}</div>`;
+  return `<div class="match-slot">
+    <img src="${t.logo}" alt="" class="team-logo-sm" onerror="this.style.display='none'">
+    ${t.name}
+  </div>`;
+}
+
+function thirdSlot(letters, label) {
+  const t = getBestThirdFrom(letters.split(''));
+  if (!t) return `<div class="match-slot tbd">${label}</div>`;
+  return `<div class="match-slot">
+    <img src="${t.logo}" alt="" class="team-logo-sm" onerror="this.style.display='none'">
+    ${t.name} <span style="color:var(--text3);font-size:10px">3rd ${t.group}</span>
+  </div>`;
+}
+
+function tbdSlot(label) {
+  return `<div class="match-slot tbd">${label}</div>`;
+}
+
+function matchBlock(no, a, b, label) {
+  return `<div class="match-pair">
+    <div class="match-no">${no}${label?' — '+label:''}</div>
+    ${a}<div class="match-divider"></div>${b}
+  </div>`;
+}
+
+function renderBracket() {
+  if (!GROUPS.length) return;
+
+  const r32 = [
+    matchBlock('M73', teamSlot('A',1), teamSlot('B',1)),
+    matchBlock('M74', teamSlot('E',0), thirdSlot('ABCDF','3rd ABCDF')),
+    matchBlock('M75', teamSlot('F',0), teamSlot('C',1)),
+    matchBlock('M76', teamSlot('C',0), teamSlot('F',1)),
+    matchBlock('M77', teamSlot('I',0), thirdSlot('CDFGH','3rd CDFGH')),
+    matchBlock('M78', teamSlot('E',1), teamSlot('I',1)),
+    matchBlock('M79', teamSlot('A',0), thirdSlot('CEFHI','3rd CEFHI')),
+    matchBlock('M80', teamSlot('L',0), thirdSlot('EHIJK','3rd EHIJK')),
+    matchBlock('M81', teamSlot('D',0), thirdSlot('BEFIJ','3rd BEFIJ')),
+    matchBlock('M82', teamSlot('G',0), thirdSlot('AEHIJ','3rd AEHIJ')),
+    matchBlock('M83', teamSlot('K',1), teamSlot('L',1)),
+    matchBlock('M84', teamSlot('H',0), teamSlot('J',1)),
+    matchBlock('M85', teamSlot('B',0), thirdSlot('EFGIJ','3rd EFGIJ')),
+    matchBlock('M86', teamSlot('J',0), teamSlot('H',1)),
+    matchBlock('M87', teamSlot('K',0), thirdSlot('DEIJL','3rd DEIJL')),
+    matchBlock('M88', teamSlot('D',1), teamSlot('G',1)),
+  ];
+
+  const r16 = [
+    matchBlock('M89', tbdSlot('W M74'), tbdSlot('W M77')),
+    matchBlock('M90', tbdSlot('W M73'), tbdSlot('W M75')),
+    matchBlock('M91', tbdSlot('W M76'), tbdSlot('W M78')),
+    matchBlock('M92', tbdSlot('W M79'), tbdSlot('W M80')),
+    matchBlock('M93', tbdSlot('W M83'), tbdSlot('W M84')),
+    matchBlock('M94', tbdSlot('W M81'), tbdSlot('W M82')),
+    matchBlock('M95', tbdSlot('W M86'), tbdSlot('W M88')),
+    matchBlock('M96', tbdSlot('W M85'), tbdSlot('W M87')),
+  ];
+
+  const qf = [
+    matchBlock('M97',  tbdSlot('W M89'), tbdSlot('W M90')),
+    matchBlock('M98',  tbdSlot('W M93'), tbdSlot('W M94')),
+    matchBlock('M99',  tbdSlot('W M91'), tbdSlot('W M92')),
+    matchBlock('M100', tbdSlot('W M95'), tbdSlot('W M96')),
+  ];
+
+  const sf = [
+    matchBlock('M101', tbdSlot('W M97'), tbdSlot('W M98')),
+    matchBlock('M102', tbdSlot('W M99'), tbdSlot('W M100')),
+  ];
+
+  const finals = [
+    matchBlock('M103', tbdSlot('L M101'), tbdSlot('L M102'), '3rd place'),
+    matchBlock('M104', tbdSlot('W M101'), tbdSlot('W M102'), 'Final'),
+  ];
+
+  function round(label, matches) {
+    return `<div class="bracket-round">
+      <div class="round-label">${label}</div>
+      <div class="round-matches">${matches.join('')}</div>
+    </div>`;
+  }
+
+  document.getElementById('bracketInner').innerHTML =
+    round('Round of 32', r32) +
+    round('Round of 16', r16) +
+    round('Quarter-finals', qf) +
+    round('Semi-finals', sf) +
+    round('Final', finals);
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+loadCache();
+</script>
+</body>
+</html>

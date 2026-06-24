@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: wc26-tracker
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: API_FOOTBALL_KEY
+        value: dd11f4bd10ccb65f04cc749f31b22350
